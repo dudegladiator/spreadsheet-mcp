@@ -1,0 +1,64 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.11", "3.12"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          version: "latest"
+
+      - name: Set up Python ${{ matrix.python-version }}
+        run: uv python install ${{ matrix.python-version }}
+
+      - name: Install dependencies
+        run: uv sync
+
+      - name: Verify imports
+        run: |
+          uv run python -c "from spreadsheet_mcp.server import mcp; print('Server imports OK')"
+          uv run python -c "from spreadsheet_mcp.sheets_client import SheetsClient; print('Client imports OK')"
+          uv run python -c "from spreadsheet_mcp.auth import get_credentials_path; print('Auth imports OK')"
+
+      - name: Check code syntax
+        run: |
+          uv run python -m py_compile src/spreadsheet_mcp/server.py
+          uv run python -m py_compile src/spreadsheet_mcp/sheets_client.py
+          uv run python -m py_compile src/spreadsheet_mcp/auth.py
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          version: "latest"
+
+      - name: Set up Python
+        run: uv python install 3.12
+
+      - name: Install dependencies with dev extras
+        run: uv sync --extra dev
+
+      - name: Run ruff check
+        run: uv run ruff check src/ --ignore E501
+        continue-on-error: true
+
+      - name: Run ruff format check
+        run: uv run ruff format --check src/
+        continue-on-error: true
