@@ -712,6 +712,47 @@ class SheetsClient:
     # =========================================================================
     # Charts
     # =========================================================================
+    
+    def _parse_a1_range(self, a1_range: str) -> tuple[str | None, int, int, int, int]:
+        """Parse A1 notation range into components.
+        
+        Args:
+            a1_range: A1 notation like "Sheet1!A1:F10" or "A1:D5"
+            
+        Returns:
+            Tuple of (sheet_name, start_row, end_row, start_col, end_col)
+            All indices are 0-based.
+        """
+        import re
+        
+        # Remove sheet name if present
+        sheet_name = None
+        if "!" in a1_range:
+            sheet_name, a1_range = a1_range.rsplit("!", 1)
+            sheet_name = sheet_name.strip("'\"")
+        
+        # Parse range like A1:F10 or A:F or 1:10
+        match = re.match(r"([A-Z]*)(\d*):?([A-Z]*)(\d*)", a1_range.upper())
+        if not match:
+            return sheet_name, 0, 100, 0, 1
+        
+        start_col_str, start_row_str, end_col_str, end_row_str = match.groups()
+        
+        def col_to_index(col: str) -> int:
+            """Convert column letter to 0-based index (A=0, B=1, Z=25, AA=26)."""
+            if not col:
+                return 0
+            result = 0
+            for char in col:
+                result = result * 26 + (ord(char) - ord('A') + 1)
+            return result - 1
+        
+        start_col = col_to_index(start_col_str) if start_col_str else 0
+        end_col = col_to_index(end_col_str) + 1 if end_col_str else start_col + 1
+        start_row = int(start_row_str) - 1 if start_row_str else 0
+        end_row = int(end_row_str) if end_row_str else start_row + 100
+        
+        return sheet_name, start_row, end_row, start_col, end_col
 
     def create_chart(
         self,
@@ -722,98 +763,107 @@ class SheetsClient:
         title: str = "",
         position_row: int = 0,
         position_col: int = 0,
+        domain_column: int = 0,
+        series_columns: list[int] | None = None,
     ) -> dict:
-        """Create an embedded chart.
+        """Create an embedded chart with multiple series support.
 
         Args:
             spreadsheet_id: The ID of the spreadsheet.
             sheet_id: The numeric ID of the sheet where chart will be placed.
             chart_type: Type of chart: "BAR", "LINE", "PIE", "AREA", "COLUMN", "SCATTER".
-            data_range: A1 notation of data range (e.g., "Sheet1!A1:B10").
+            data_range: A1 notation of data range (e.g., "Sheet1!A1:F10").
             title: Chart title.
             position_row: Row offset for chart position.
             position_col: Column offset for chart position.
+            domain_column: Column index for X-axis/domain (0-based, relative to data_range start).
+            series_columns: List of column indices for data series (0-based, relative to range).
+                           If None, auto-detects all columns after domain_column.
 
         Returns:
             Chart info including chart ID.
         """
-        # Parse the data range to get source sheet ID
-        # For simplicity, we'll use the same sheet_id for data source
+        # Parse the data range
+        _, start_row, end_row, start_col, end_col = self._parse_a1_range(data_range)
+        
+        # Calculate absolute column positions
+        domain_col_abs = start_col + domain_column
+        
+        # Auto-detect series columns if not specified
+        if series_columns is None:
+            # All columns after domain column
+            num_cols = end_col - start_col
+            series_columns = [i for i in range(num_cols) if i != domain_column]
+        
+        # Build series list for multiple data columns
+        series_list = []
+        for col_idx in series_columns:
+            series_col_abs = start_col + col_idx
+            series_list.append({
+                "series": {
+                    "sourceRange": {
+                        "sources": [{
+                            "sheetId": sheet_id,
+                            "startRowIndex": start_row,
+                            "endRowIndex": end_row,
+                            "startColumnIndex": series_col_abs,
+                            "endColumnIndex": series_col_abs + 1,
+                        }]
+                    }
+                },
+                "targetAxis": "LEFT_AXIS",
+            })
 
         chart_spec: dict[str, Any] = {
             "title": title,
             "basicChart": {
                 "chartType": chart_type.upper(),
                 "legendPosition": "BOTTOM_LEGEND",
-                "domains": [
-                    {
-                        "domain": {
-                            "sourceRange": {
-                                "sources": [
-                                    {
-                                        "sheetId": sheet_id,
-                                        "startRowIndex": 0,
-                                        "endRowIndex": 100,
-                                        "startColumnIndex": 0,
-                                        "endColumnIndex": 1,
-                                    }
-                                ]
-                            }
+                "domains": [{
+                    "domain": {
+                        "sourceRange": {
+                            "sources": [{
+                                "sheetId": sheet_id,
+                                "startRowIndex": start_row,
+                                "endRowIndex": end_row,
+                                "startColumnIndex": domain_col_abs,
+                                "endColumnIndex": domain_col_abs + 1,
+                            }]
                         }
                     }
-                ],
-                "series": [
-                    {
-                        "series": {
-                            "sourceRange": {
-                                "sources": [
-                                    {
-                                        "sheetId": sheet_id,
-                                        "startRowIndex": 0,
-                                        "endRowIndex": 100,
-                                        "startColumnIndex": 1,
-                                        "endColumnIndex": 2,
-                                    }
-                                ]
-                            }
-                        },
-                        "targetAxis": "LEFT_AXIS",
-                    }
-                ],
+                }],
+                "series": series_list,
                 "headerCount": 1,
             },
         }
 
-        # Special handling for PIE charts
+        # Special handling for PIE charts (only supports single series)
         if chart_type.upper() == "PIE":
+            first_series_col = start_col + (series_columns[0] if series_columns else 1)
             chart_spec = {
                 "title": title,
                 "pieChart": {
                     "legendPosition": "RIGHT_LEGEND",
                     "domain": {
                         "sourceRange": {
-                            "sources": [
-                                {
-                                    "sheetId": sheet_id,
-                                    "startRowIndex": 0,
-                                    "endRowIndex": 100,
-                                    "startColumnIndex": 0,
-                                    "endColumnIndex": 1,
-                                }
-                            ]
+                            "sources": [{
+                                "sheetId": sheet_id,
+                                "startRowIndex": start_row,
+                                "endRowIndex": end_row,
+                                "startColumnIndex": domain_col_abs,
+                                "endColumnIndex": domain_col_abs + 1,
+                            }]
                         }
                     },
                     "series": {
                         "sourceRange": {
-                            "sources": [
-                                {
-                                    "sheetId": sheet_id,
-                                    "startRowIndex": 0,
-                                    "endRowIndex": 100,
-                                    "startColumnIndex": 1,
-                                    "endColumnIndex": 2,
-                                }
-                            ]
+                            "sources": [{
+                                "sheetId": sheet_id,
+                                "startRowIndex": start_row,
+                                "endRowIndex": end_row,
+                                "startColumnIndex": first_series_col,
+                                "endColumnIndex": first_series_col + 1,
+                            }]
                         }
                     },
                 },
