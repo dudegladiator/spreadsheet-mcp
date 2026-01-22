@@ -2,6 +2,10 @@
 
 A Model Context Protocol (MCP) server providing full Google Sheets functionality. Read, write, format cells, create charts, use formulas, and manage spreadsheets directly from Claude, Cursor, or any MCP-compatible client.
 
+## Why I Built This
+
+I created this MCP server for my college assignments, where I frequently work with data in Google Sheets — mostly financial sheets. Tasks like creating charts, writing formulas, formatting tables, and organizing data were repetitive and time-consuming. With this tool, I can automate all of that and focus on what actually matters — logical thinking and analysis — instead of doing the same manual work over and over again. :)
+
 ## Features
 
 | Category | Capabilities |
