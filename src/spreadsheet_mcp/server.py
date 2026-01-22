@@ -565,35 +565,58 @@ def create_chart(
     title: str = "",
     position_row: int = 0,
     position_col: int = 5,
+    domain_column: int = 0,
+    series_columns: str = ""
 ) -> str:
-    """Create an embedded chart from sheet data.
+    """Create an embedded chart with MULTIPLE SERIES support.
 
     Examples:
-        - Column chart: create_chart("abc", 0, "COLUMN", "Sheet1!A1:B10", "Sales")
-        - Pie chart: create_chart("abc", 0, "PIE", "Sheet1!A1:B5", "Distribution")
-        - Line chart at position H1: create_chart("abc", 0, "LINE", "A1:D10", "Trends", 0, 7)
+        - Multi-series line chart (auto-detect all columns B-F as series):
+          create_chart("abc", 0, "LINE", "Sheet1!A1:F10", "Stock Prices")
+          
+        - Explicit series columns (B=1, C=2, D=3, E=4 as separate lines):
+          create_chart("abc", 0, "LINE", "A1:E10", "Comparison", 0, 7, 0, "1,2,3,4")
+          
+        - Pie chart (single series from column B):
+          create_chart("abc", 0, "PIE", "A1:B5", "Distribution")
 
     Chart Types:
-        - BAR: Horizontal bars
-        - COLUMN: Vertical bars (most common)
-        - LINE: Line graph for trends
-        - PIE: Circular chart for proportions
-        - AREA: Filled line chart
+        - BAR: Horizontal bars (multiple series = grouped bars)
+        - COLUMN: Vertical bars (multiple series = grouped columns)
+        - LINE: Line graph (multiple series = multiple lines, great for trends)
+        - PIE: Circular chart (single series only)
+        - AREA: Stacked area chart
         - SCATTER: X-Y scatter plot
+
+    Multi-Series Example:
+        Data: | Date | ONGC | BPCL | IOCL | NTPC | CIL |
+        Range: "Sheet1!A1:F30"
+        domain_column: 0 (Date column as X-axis)
+        series_columns: "1,2,3,4,5" (or leave empty to auto-detect)
+        Result: 5 lines on one chart, each representing a company
 
     Args:
         spreadsheet_id: The ID from the spreadsheet URL.
         sheet_id: Numeric sheet ID where chart will be placed.
         chart_type: BAR, LINE, PIE, AREA, COLUMN, or SCATTER.
-        data_range: A1 notation of data range (e.g., "Sheet1!A1:B10").
+        data_range: A1 notation of data range (e.g., "Sheet1!A1:F30").
         title: Chart title displayed at top.
         position_row: Row offset for chart placement (0-based).
         position_col: Column offset for chart placement (0=A, 5=F, 7=H).
+        domain_column: Column index for X-axis labels (0=first column of range).
+        series_columns: Comma-separated indices for series data (e.g., "1,2,3,4,5").
+                       Empty = auto-detect all columns after domain_column.
 
     Returns:
         JSON with chart_id for later reference.
     """
     client = get_client()
+    
+    # Parse series_columns string to list
+    series_list = None
+    if series_columns.strip():
+        series_list = [int(x.strip()) for x in series_columns.split(",") if x.strip()]
+    
     result = client.create_chart(
         spreadsheet_id=spreadsheet_id,
         sheet_id=sheet_id,
@@ -602,6 +625,8 @@ def create_chart(
         title=title,
         position_row=position_row,
         position_col=position_col,
+        domain_column=domain_column,
+        series_columns=series_list
     )
     return json.dumps(result, indent=2)
 
