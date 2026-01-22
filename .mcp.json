@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "google-sheets": {
+      "command": "uv",
+      "args": [
+        "--directory",
+        "/Users/harsh/IMP/fun/spreadsheet-mcp",
+        "run",
+        "spreadsheet-mcp"
+      ]
+    }
+  }
+}

@@ -44,8 +44,5 @@ service-cred.json
 .DS_Store
 Thumbs.db
 
-# Local MCP config (contains local paths)
-.mcp.json
-
 # Claude Code local settings
 .claude/
